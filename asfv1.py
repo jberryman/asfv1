@@ -404,9 +404,12 @@ class fv1parse(object):
                             self.prevline)
         return oft
 
+    # NOTE: int type arguments passed to these fixed point methods originated
+    # as raw hexadecimal or binary notation numbers in the source, so we treat
+    # them as bit-for-bit values. A "1" in the source is treated the same as "1.0"
     def __s1_14__(self):
         """Fetch a 16 bit real argument."""
-        arg = self.__expression__()
+        arg = self.__expression__(True)
         if type(arg) is int:
             if arg < 0 or arg > M16:
                 if self.doclamp:
@@ -436,7 +439,7 @@ class fv1parse(object):
 
     def __s_10__(self):
         """Fetch an 11 bit S.10 real argument."""
-        arg = self.__expression__()
+        arg = self.__expression__(True)
         if type(arg) is int:
             if arg < 0 or arg > M11:
                 if self.doclamp:
@@ -466,7 +469,7 @@ class fv1parse(object):
 
     def __s_15__(self):
         """Fetch a 16 bit S.15 real argument."""
-        arg = self.__expression__()
+        arg = self.__expression__(True)
         if type(arg) is int:
             if arg < 0 or arg > M16:
                 if self.doclamp:
@@ -516,7 +519,7 @@ class fv1parse(object):
 
     def __s_23__(self):
         """Fetch a 24 bit S.23 real or mask argument."""
-        arg = self.__expression__()
+        arg = self.__expression__(True)
         if type(arg) is int:
             if arg < 0 or arg > M24:
                 if self.doclamp:
@@ -546,7 +549,7 @@ class fv1parse(object):
 
     def __s1_9__(self):
         """Fetch an 11 bit real argument."""
-        arg = self.__expression__()
+        arg = self.__expression__(True)
         if type(arg) is int:
             if arg < 0 or arg > M11:
                 if self.doclamp:
@@ -576,7 +579,7 @@ class fv1parse(object):
 
     def __s4_6__(self):
         """Fetch an 11 bit S4.6 argument."""
-        arg = self.__expression__()
+        arg = self.__expression__(True)
         if type(arg) is int:
             if arg < 0 or arg > M11:
                 if self.doclamp:
@@ -726,6 +729,7 @@ class fv1parse(object):
                         try:
                             ival = int(ht.replace('_',''),base)
                             self.sym = {'type': 'INTEGER',
+                                        'base_rep': base,
                                         'txt': pref+ht,
                                         'val': ival}
                         except:
@@ -758,6 +762,7 @@ class fv1parse(object):
                         try:
                             ival = int(intpart, base)
                             self.sym = {'type': 'INTEGER',
+                                        'base_rep': base,
                                         'txt': intpart,
                                         'val': ival}
                         except:
@@ -964,7 +969,7 @@ class fv1parse(object):
             seen.add(symbol)
         return look
 
-    def __expression__(self):
+    def __expression__(self, decimals_as_real=False):
         """Parse an operand expression."""
         # ignore type and let python promote as required
         # expression ::= [+|-] term ( +|- term )*
@@ -976,7 +981,7 @@ class fv1parse(object):
             self.__next__()
 
         # First term
-        acc = self.__term__()
+        acc = self.__term__(decimals_as_real)
         if sign == '-':
             acc = 0 - acc
 
@@ -984,28 +989,28 @@ class fv1parse(object):
         while self.sym['type'] == 'OPERATOR' and self.sym['txt'] in ['+','-']:
             sign = self.sym['txt']
             self.__next__()
-            nterm = self.__term__()
+            nterm = self.__term__(decimals_as_real)
             if sign == '-':
                 acc -= nterm
             else:
                 acc += nterm
         return acc
 
-    def __term__(self):
+    def __term__(self, decimals_as_real):
         """Parse an operand term."""
         # term ::= factor (| factor)*
 
-        acc = self.__factor__()
+        acc = self.__factor__(decimals_as_real)
         while self.sym['type'] == 'OPERATOR' and self.sym['txt'] == '|':
             self.__next__()
-            nfact = self.__factor__()
+            nfact = self.__factor__(decimals_as_real)
             if type(acc) is float or type(nfact) is float:
                 self.parseerror('Invalid bitwise operation on real value',
                                  self.prefline)
             acc |= nfact
         return acc
 
-    def __factor__(self):
+    def __factor__(self, decimals_as_real):
         """Parse an operand factor."""
         # factor ::= [!] immediate
         bitneg = False
@@ -1020,7 +1025,14 @@ class fv1parse(object):
             else:
                 self.parseerror('Undefined symbol ' + repr(stxt))
         elif self.sym['type'] in ['INTEGER', 'FLOAT']:
-            ret = self.sym['val']
+            if decimals_as_real and self.sym['type'] == 'INTEGER' and self.sym['base_rep'] == 10:
+                # We want to interpret decimal literals as reals (which is done
+                # implicitly by returning a float-type value). If the numeric
+                # literal was entered in a hex or binary format, assume the
+                # user wants this exact byte value (implicitly encoded as int).
+                ret = float(self.sym['val'])
+            else:
+                ret = self.sym['val']
         else:
             self.parseerror('Expected IMMEDIATE but saw {}/{}'.format(
                               self.sym['type'], repr(self.sym['txt'])))

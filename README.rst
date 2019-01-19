@@ -29,13 +29,6 @@ into machine code, ready for uploading to the FV-1.
 
 There are some minor quirks:
 
- - Signed fixed point arguments (S1.14, S1.9, S.10) may be
-   entered using an unsigned integer equivalent value. This 
-   causes a conflict with SpinASM, when entries like -1 and 1
-   are interpreted differently depending on how they are used.
-   In asfv1, all operands are treated alike, so to specify
-   a real number, the decimal part is compulsory: Eg -1.0, 1.0.
-
  - By default, immediate values that would overflow available
    argument sizes will generate an error and abort assembly.
    Command line option -c (--clamp) will instead restrict the
